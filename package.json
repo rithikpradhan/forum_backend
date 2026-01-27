@@ -1,7 +1,6 @@
 {
   "name": "forum_backend",
   "version": "1.0.0",
-  "main": "index.js",
   "scripts": {
     "dev": "nodemon src/server.ts",
     "build": "tsc",
@@ -13,7 +12,6 @@
   "description": "",
   "dependencies": {
     "bcrypt": "^6.0.0",
-    "browser-image-compression": "^2.0.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
