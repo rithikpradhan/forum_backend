@@ -10,7 +10,7 @@ app.use(
     origin: [
       "http://localhost:3000",
       "http://localhost:5173",
-      "https://forum-appfrontend.vercel.app",
+      "https://forum-app-b1rs.vercel.app",
     ],
     credentials: true,
   }),

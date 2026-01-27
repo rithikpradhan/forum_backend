@@ -38,7 +38,7 @@ app.use("/api/users", userRoute);
 // socket.io
 export const io = new Server(server, {
   cors: {
-    origin: "https://forum-appfrontend.vercel.app/",
+    origin: "https://forum-appfrontend.vercel.app",
     credentials: true,
   },
 });
