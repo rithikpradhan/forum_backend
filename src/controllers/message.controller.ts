@@ -23,15 +23,16 @@ export const sendMessage = async (req: any, res: Response) => {
       return res.status(404).json({ message: "Thread not found" });
     }
 
-    // Handle replyingTo - it can be either a messageId or an object
+    // Handle replyingTo
 
     let replyingToId = null;
     if (replyingTo) {
-      if (typeof replyingTo === "string") {
+      if (typeof replyingTo === "string" && replyingTo.length === 24) {
         replyingToId = replyingTo;
       } else if (replyingTo._id) {
         replyingToId = replyingTo._id;
       }
+      console.log(" Replying to message ID:", replyingToId);
     }
 
     // Create message
@@ -47,7 +48,7 @@ export const sendMessage = async (req: any, res: Response) => {
     await message.populate("sender", "name");
 
     // Populate replyingTo if exists
-    let replyingData = null;
+    let replyingToData = null;
     if (message.replyingTo) {
       await message.populate({
         path: "replyingTo",
@@ -55,7 +56,7 @@ export const sendMessage = async (req: any, res: Response) => {
       });
 
       const replyMsg = message.replyingTo as any;
-      replyingData = {
+      replyingToData = {
         _id: replyMsg._id,
         name: replyMsg.sender?.name || "Unknown",
         content: replyMsg.content,
@@ -73,7 +74,7 @@ export const sendMessage = async (req: any, res: Response) => {
         _id: (message.sender as any)._id,
         name: (message.sender as any).name,
       },
-      replyingTo: replyingData,
+      replyingTo: replyingToData,
     };
 
     // Emit to socket

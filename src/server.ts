@@ -38,9 +38,137 @@ app.use("/api/users", userRoute);
 // socket.io
 export const io = new Server(server, {
   cors: {
-    origin: "https://forum-appfrontend.vercel.app",
+    origin: ["http://localhost:3000", "https://forum-appfrontend.vercel.app"],
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE"],
   },
+  // CRITICAL for Render.com
+  transports: ["websocket", "polling"],
+  pingTimeout: 60000, // 60 seconds
+  pingInterval: 25000, // 25 seconds
+  upgradeTimeout: 30000, // 30 seconds for websocket upgrade
+  maxHttpBufferSize: 1e6, // 1MB
+});
+
+// Enhanced socket authentication
+io.use(async (socket, next) => {
+  const token = socket.handshake.auth.token;
+
+  console.log("🔐 Socket auth attempt from:", socket.handshake.address);
+  console.log("🔐 Token present:", !!token);
+
+  if (!token) {
+    console.log("❌ No token provided");
+    return next(new Error("Authentication error"));
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {
+      id: string;
+    };
+    const user = await User.findById(decoded.id).select("name email");
+
+    if (!user) {
+      console.log("❌ User not found for token");
+      return next(new Error("User not found"));
+    }
+
+    (socket as any).userId = user._id.toString();
+    (socket as any).userName = user.name;
+    (socket as any).userEmail = user.email;
+
+    console.log(
+      "✅ Socket authenticated:",
+      user.name,
+      "ID:",
+      user._id.toString(),
+    );
+    next();
+  } catch (err: any) {
+    console.error("❌ Authentication error:", err.message);
+    return next(new Error("Authentication error"));
+  }
+});
+
+io.on("connection", (socket) => {
+  const userId = (socket as any).userId;
+  const userName = (socket as any).userName;
+
+  console.log(`✅✅✅ ${userName} (${userId}) CONNECTED:`, socket.id);
+  console.log(`🚀 Transport: ${socket.conn.transport.name}`);
+
+  // Join personal room
+  socket.join(userId);
+  console.log(`👤 ${userName} joined personal room: ${userId}`);
+
+  // Join thread handler
+  socket.on("joinThread", (threadId: string) => {
+    socket.join(threadId);
+    console.log(`📍📍 ${userName} JOINING THREAD: ${threadId}`);
+
+    if (!onlineUsers.has(threadId)) {
+      onlineUsers.set(threadId, new Map());
+    }
+
+    const threadUsers = onlineUsers.get(threadId)!;
+    threadUsers.set(userId, {
+      socketId: socket.id,
+      userId: userId,
+      userName: userName,
+    });
+
+    const onlineUsersList = Array.from(threadUsers.values()).map((u) => ({
+      userId: u.userId,
+      userName: u.userName,
+    }));
+
+    console.log(
+      `👥👥 EMITTING online users for thread ${threadId}:`,
+      onlineUsersList,
+    );
+    io.to(threadId).emit("onlineUsers", onlineUsersList);
+  });
+
+  // Typing indicator
+  socket.on(
+    "typing",
+    ({ threadId, isTyping }: { threadId: string; isTyping: boolean }) => {
+      console.log(
+        `⌨️  ${userName} ${isTyping ? "typing" : "stopped typing"} in ${threadId}`,
+      );
+      socket.to(threadId).emit("userTyping", { userId, userName, isTyping });
+    },
+  );
+
+  // Disconnect handler
+  socket.on("disconnect", (reason) => {
+    console.log(`❌❌ ${userName} DISCONNECTED:`, reason);
+
+    onlineUsers.forEach((users, threadId) => {
+      if (users.has(userId)) {
+        users.delete(userId);
+
+        const onlineUsersList = Array.from(users.values()).map((u) => ({
+          userId: u.userId,
+          userName: u.userName,
+        }));
+
+        console.log(
+          `👥 Updated online users in thread ${threadId}:`,
+          onlineUsersList,
+        );
+        io.to(threadId).emit("onlineUsers", onlineUsersList);
+
+        if (users.size === 0) {
+          onlineUsers.delete(threadId);
+        }
+      }
+    });
+  });
+
+  socket.on("error", (error) => {
+    console.error(`❌ Socket error for ${userName}:`, error);
+  });
 });
 
 // Track online users per thread
